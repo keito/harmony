@@ -1,3 +1,5 @@
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -43,6 +45,11 @@ impl std::fmt::Debug for HarmonyEncodingName {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_harmony_encoding(name: HarmonyEncodingName) -> anyhow::Result<HarmonyEncoding> {
+    load_harmony_encoding_with_path(name, None)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_harmony_encoding_with_path(name: HarmonyEncodingName, path_override: Option<PathBuf>) -> anyhow::Result<HarmonyEncoding> {
     match name {
         HarmonyEncodingName::HarmonyGptOss => {
             let n_ctx = 1_048_576; // 2^20
@@ -51,7 +58,7 @@ pub fn load_harmony_encoding(name: HarmonyEncodingName) -> anyhow::Result<Harmon
             Ok(HarmonyEncoding {
                 name: name.to_string(),
                 n_ctx,
-                tokenizer: Arc::new(encoding_ext.load()?),
+                tokenizer: Arc::new(encoding_ext.load_with_path(path_override)?),
                 tokenizer_name: encoding_ext.name().to_owned(),
                 max_message_tokens: n_ctx - max_action_length,
                 max_action_length,

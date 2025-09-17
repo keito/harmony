@@ -8,6 +8,8 @@ pub mod tiktoken_ext;
 
 pub use encoding::{HarmonyEncoding, StreamableParser};
 pub use registry::load_harmony_encoding;
+#[cfg(not(target_arch = "wasm32"))]
+pub use registry::load_harmony_encoding_with_path;
 pub use registry::HarmonyEncodingName;
 
 #[cfg(test)]

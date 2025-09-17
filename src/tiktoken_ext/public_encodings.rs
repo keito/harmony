@@ -123,9 +123,16 @@ impl Encoding {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load(&self) -> Result<CoreBPE, LoadError> {
+        self.load_with_path(None)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_with_path(&self, path_override: Option<PathBuf>) -> Result<CoreBPE, LoadError> {
         #[cfg(not(target_arch = "wasm32"))]
         let (vocab_file_path, check_hash) =
-            if let Ok(base_dir) = std::env::var(TIKTOKEN_ENCODINGS_BASE_VAR) {
+            if let Some(path_override) = path_override {
+                (path_override, false)
+            } else if let Ok(base_dir) = std::env::var(TIKTOKEN_ENCODINGS_BASE_VAR) {
                 (PathBuf::from(base_dir).join(self.vocab_file_name()), true)
             } else {
                 let url = self.public_vocab_file_url();
