@@ -43,15 +43,24 @@ impl std::fmt::Debug for HarmonyEncodingName {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_harmony_encoding(name: HarmonyEncodingName) -> anyhow::Result<HarmonyEncoding> {
+    load_harmony_encoding_from_bytes(name, None)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_harmony_encoding_from_bytes(name: HarmonyEncodingName, bytes_override: Option<&[u8]>) -> anyhow::Result<HarmonyEncoding> {
     match name {
         HarmonyEncodingName::HarmonyGptOss => {
             let n_ctx = 1_048_576; // 2^20
             let max_action_length = 524_288; // 2^19
             let encoding_ext = tiktoken_ext::Encoding::O200kHarmony;
+            let tokenizer = match bytes_override {
+                Some(bytes) => encoding_ext.load_from_bytes(bytes)?,
+                None => encoding_ext.load_from_file()?,
+            };
             Ok(HarmonyEncoding {
                 name: name.to_string(),
                 n_ctx,
-                tokenizer: Arc::new(encoding_ext.load()?),
+                tokenizer: Arc::new(tokenizer),
                 tokenizer_name: encoding_ext.name().to_owned(),
                 max_message_tokens: n_ctx - max_action_length,
                 max_action_length,

@@ -123,7 +123,20 @@ impl Encoding {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load(&self) -> Result<CoreBPE, LoadError> {
-        #[cfg(not(target_arch = "wasm32"))]
+        self.load_from_file()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub async fn load(&self) -> Result<CoreBPE, LoadError> {
+        let url = self.public_vocab_file_url();
+        let vocab_bytes = download_or_find_cached_file_bytes(&url, Some(self.expected_hash()))
+            .await
+            .map_err(LoadError::DownloadOrLoadVocabFile)?;
+        self.load_from_bytes(&vocab_bytes)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_from_file(&self) -> Result<CoreBPE, LoadError> {
         let (vocab_file_path, check_hash) =
             if let Ok(base_dir) = std::env::var(TIKTOKEN_ENCODINGS_BASE_VAR) {
                 (PathBuf::from(base_dir).join(self.vocab_file_name()), true)
@@ -144,19 +157,12 @@ impl Encoding {
                     .map(|(s, r)| ((*s).to_string(), *r))
                     .collect();
                 specials.extend((200014..=201088).map(|id| (format!("<|reserved_{id}|>"), id)));
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    load_encoding_from_file(
-                        vocab_file_path,
-                        check_hash.then(|| self.expected_hash()),
-                        specials,
-                        &self.pattern(),
-                    )
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    load_encoding_from_bytes(&vocab_bytes, None, specials, &self.pattern())
-                }
+                load_encoding_from_file(
+                    vocab_file_path,
+                    check_hash.then(|| self.expected_hash()),
+                    specials,
+                    &self.pattern(),
+                )
             }
             Self::O200kBase => {
                 let mut specials: Vec<(String, Rank)> = self
@@ -165,50 +171,25 @@ impl Encoding {
                     .map(|(s, r)| ((*s).to_string(), *r))
                     .collect();
                 specials.extend((199998..=201088).map(|id| (format!("<|reserved_{id}|>"), id)));
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    load_encoding_from_file(
-                        vocab_file_path,
-                        check_hash.then(|| self.expected_hash()),
-                        specials,
-                        &self.pattern(),
-                    )
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    load_encoding_from_bytes(&vocab_bytes, None, specials, &self.pattern())
-                }
+                load_encoding_from_file(
+                    vocab_file_path,
+                    check_hash.then(|| self.expected_hash()),
+                    specials,
+                    &self.pattern(),
+                )
             }
             _ => {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    load_encoding_from_file(
-                        vocab_file_path,
-                        check_hash.then(|| self.expected_hash()),
-                        self.special_tokens().iter().cloned(),
-                        &self.pattern(),
-                    )
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    load_encoding_from_bytes(
-                        &vocab_bytes,
-                        None,
-                        self.special_tokens().iter().cloned(),
-                        &self.pattern(),
-                    )
-                }
+                load_encoding_from_file(
+                    vocab_file_path,
+                    check_hash.then(|| self.expected_hash()),
+                    self.special_tokens().iter().cloned(),
+                    &self.pattern(),
+                )
             }
         }
     }
 
-    #[cfg(target_arch = "wasm32")]
-    pub async fn load(&self) -> Result<CoreBPE, LoadError> {
-        let url = self.public_vocab_file_url();
-        let vocab_bytes = download_or_find_cached_file_bytes(&url, Some(self.expected_hash()))
-            .await
-            .map_err(LoadError::DownloadOrLoadVocabFile)?;
-
+    pub fn load_from_bytes(&self, vocab_bytes: &[u8]) -> Result<CoreBPE, LoadError> {
         match self {
             Self::O200kHarmony => {
                 let mut specials: Vec<(String, Rank)> = self
@@ -402,6 +383,28 @@ where
     TS: Into<String>,
 {
     let encoder = load_tiktoken_vocab_file(file_path, expected_hash)
+        .map_err(LoadError::InvalidTiktokenVocabFile)?;
+    CoreBPE::new(
+        encoder,
+        special_tokens.into_iter().map(|(k, v)| (k.into(), v)),
+        pattern,
+    )
+    .map_err(LoadError::CoreBPECreationFailed)
+}
+
+pub fn load_encoding_from_bytes<S, TS>(
+    bytes: &[u8],
+    expected_hash: Option<&str>,
+    special_tokens: S,
+    pattern: &str,
+) -> Result<CoreBPE, LoadError>
+where
+    S: IntoIterator<Item = (TS, Rank)>,
+    TS: Into<String>,
+{
+    let reader = std::io::Cursor::new(bytes);
+    let buf_reader = std::io::BufReader::new(reader);
+    let encoder = load_tiktoken_vocab(buf_reader, expected_hash)
         .map_err(LoadError::InvalidTiktokenVocabFile)?;
     CoreBPE::new(
         encoder,
