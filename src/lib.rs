@@ -3,7 +3,7 @@
 pub mod chat;
 mod encoding;
 mod registry;
-mod tiktoken;
+pub mod tiktoken;
 pub mod tiktoken_ext;
 
 pub use encoding::{HarmonyEncoding, StreamableParser};
